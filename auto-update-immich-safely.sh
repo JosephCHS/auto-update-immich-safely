@@ -14,7 +14,7 @@ fi
 source "$CONFIG_FILE"
 
 # Check if required variables are set
-REQUIRED_VARS=("API_KEY" "DOCKER_COMPOSE_PATH" "GOTIFY_TOKEN" "GOTIFY_URL" "IMMICH_PATH" "IMMICH_LOCALHOST")
+REQUIRED_VARS=("IMMICH_API_KEY" "DOCKER_COMPOSE_PATH" "GOTIFY_TOKEN" "GOTIFY_URL" "IMMICH_PATH" "IMMICH_LOCALHOST")
 for var in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${!var:-}" ]]; then
         echo "❌ Error: Required variable '$var' is not set in $CONFIG_FILE"
@@ -37,7 +37,7 @@ LATEST_VERSION=$(echo "$IMMICH_RESPONSE" | jq -r '.tag_name' | sed 's/v//')
 RELEASE_NOTES=$(echo "$IMMICH_RESPONSE" | jq -r '.body')
 
 # Get current running version
-CURRENT_VERSION_RESPONSE=$(curl -s -L "http://$IMMICH_LOCALHOST/api/server/about" -H "Accept:application/json" -H "x-api-key: $API_KEY")
+CURRENT_VERSION_RESPONSE=$(curl -s -L "http://$IMMICH_LOCALHOST/api/server/about" -H "Accept:application/json" -H "x-api-key: $IMMICH_API_KEY")
 
 # Validate Immich API response
 if [[ -z "$CURRENT_VERSION_RESPONSE" || "$CURRENT_VERSION_RESPONSE" == "null" ]]; then
