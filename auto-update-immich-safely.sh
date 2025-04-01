@@ -47,6 +47,16 @@ fi
 
 CURRENT_VERSION=$(echo "$CURRENT_VERSION_RESPONSE" | jq -r '.version' | sed 's/v//')
 
+# Get latest release date from GitHub
+LATEST_RELEASE_DATE=$(echo "$IMMICH_RESPONSE" | jq -r '.published_at' | cut -d'T' -f1)
+CURRENT_DATE=$(date +"%Y-%m-%d")
+DAYS_SINCE_RELEASE=$(( ( $(date -d "$CURRENT_DATE" +%s) - $(date -d "$LATEST_RELEASE_DATE" +%s) ) / 86400 ))
+
+# If the release is less than 7 days old, do not update
+if [ "$DAYS_SINCE_RELEASE" -lt 7 ]; then
+    echo "⏳ Skipping update: Immich v$LATEST_VERSION was released only $DAYS_SINCE_RELEASE days ago."
+    exit 0
+fi
 
 # Function to send Gotify notification
 send_gotify_notification() {
@@ -69,16 +79,6 @@ fi
 if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
     echo "🚀 Updating Immich from v$CURRENT_VERSION to v$LATEST_VERSION..."
     cd "$IMMICH_PATH" && docker compose pull && docker compose up -d
-    echo "✅ Immich updated successfully to $LATEST_VERSION."
-
-else
-    echo "✅ Immich is already up-to-date (v$CURRENT_VERSION)."
-fi
-
-# Compare versions & update if needed
-if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
-    echo "🚀 Updating Immich from v$CURRENT_VERSION to v$LATEST_VERSION..."
-    cd "$IMMICH_PATH" && docker compose pull && docker compose up -d && docker compose prune -f
     echo "✅ Immich updated successfully to $LATEST_VERSION."
 
     send_gotify_notification "✅ Immich Updated!" "Successfully updated to v$LATEST_VERSION."
