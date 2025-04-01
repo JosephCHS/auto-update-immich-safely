@@ -40,7 +40,7 @@ IMMICH_PATH="/path/to/immich"
    ```
 4. Schedule it with cron (e.g., run every night at 2 AM):
    ```bash
-   0 2 * * * ~/immich-app/update-immich.sh >> /var/log/immich_update.log 2>&1
+   0 2 * * * $HOME/immich-app/update-immich.sh >> /var/log/immich_update.log 2>&1
    ```
 
 ## Script Breakdown
