@@ -52,12 +52,6 @@ IMMICH_PATH="/path/to/immich"
 chmod +x ~/immich-app/update-immich.sh
 ```
 
-3. Create the log directory:
-
-```bash
-mkdir -p ~/immich-app
-```
-
 ## Usage
 
 ### Manual Execution
