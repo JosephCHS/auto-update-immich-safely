@@ -6,6 +6,10 @@ set -euo pipefail  # Exit on error, prevent unset variables, and catch pipeline 
 CONFIG_FILE="$HOME/immich-app/.immich.conf"
 LOG_FILE="$HOME/immich-app/update_log.txt"
 MIN_DAYS_SINCE_RELEASE=7
+CURL_TIMEOUT=30
+
+# Check for required dependencies
+command -v jq >/dev/null 2>&1 || { echo "❌ jq is required but not installed. Exiting."; exit 1; }
 
 # Function to log messages
 log_message() {
@@ -23,7 +27,7 @@ send_gotify_notification() {
     message="${message//\"/\\\"}"
     title="${title//\"/\\\"}"
     
-    if ! curl -s -X POST "$GOTIFY_URL/message" \
+    if ! curl --max-time "$CURL_TIMEOUT" -s -X POST "$GOTIFY_URL/message" \
         -H "Content-Type: application/json" \
         -H "X-Gotify-Key: $GOTIFY_TOKEN" \
         -d "{\"title\":\"$title\",\"message\":\"$message\",\"priority\":$priority}"; then
@@ -68,7 +72,7 @@ get_github_release_info() {
     local response=""
     
     while [ "$retry_count" -lt "$max_retries" ]; do
-        response=$(curl -s -f "$IMMICH_RELEASE_URL")
+        response=$(curl --max-time "$CURL_TIMEOUT" -s -f "$IMMICH_RELEASE_URL")
         if [[ -n "$response" && "$response" != "null" ]]; then
             echo "$response"
             return 0
@@ -88,7 +92,7 @@ get_current_version() {
     local response=""
     
     while [ "$retry_count" -lt "$max_retries" ]; do
-        response=$(curl -s -L -f "http://$IMMICH_LOCALHOST/api/server/about" -H "Accept: application/json" -H "x-api-key: $IMMICH_API_KEY")
+        response=$(curl --max-time "$CURL_TIMEOUT" -s -L -f "http://$IMMICH_LOCALHOST/api/server/about" -H "Accept: application/json" -H "x-api-key: $IMMICH_API_KEY")
         if [[ -n "$response" && "$response" != "null" ]]; then
             echo "$response"
             return 0
@@ -99,6 +103,11 @@ get_current_version() {
     done
     
     return 1
+}
+
+# Function to compare versions
+version_gt() {
+    test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"
 }
 
 # Main execution
@@ -113,10 +122,6 @@ if [ $? -ne 0 ]; then
     send_gotify_notification "❌ Immich Update Failed" "Could not fetch latest release information from GitHub" 8
     exit 1
 fi
-
-# Extract version and release notes
-LATEST_VERSION=$(echo "$IMMICH_RESPONSE" | jq -r '.tag_name' | sed 's/v//')
-RELEASE_NOTES=$(echo "$IMMICH_RESPONSE" | jq -r '.body')
 
 # Extract version and release notes
 LATEST_VERSION=$(echo "$IMMICH_RESPONSE" | jq -r '.tag_name' | sed 's/^v//')
@@ -156,12 +161,23 @@ if echo "$RELEASE_NOTES" | grep -iqE "breaking change|important note|caution|war
 fi
 
 # Compare versions & update if needed
-if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+if version_gt "$LATEST_VERSION" "$CURRENT_VERSION"; then
     log_message "🚀 Updating Immich from v$CURRENT_VERSION to v$LATEST_VERSION..."
       
     # Perform update
-    if cd "$IMMICH_PATH" && docker compose pull && docker compose up -d; then
+    if cd "$IMMICH_PATH" && \
+       docker compose pull && \
+       docker compose up -d; then
         log_message "✅ Immich updated successfully to v$LATEST_VERSION."
+        
+        # Cleanup old images
+        log_message "🧹 Cleaning up old Docker images..."
+        if docker image prune -f --filter "until=24h" > /dev/null; then
+            log_message "✅ Old Docker images cleaned up successfully."
+        else
+            log_message "⚠️ Failed to clean up old Docker images."
+        fi
+        
         send_gotify_notification "✅ Immich Updated!" "Successfully updated from v$CURRENT_VERSION to v$LATEST_VERSION"
     else
         log_message "❌ Update failed! Please check the logs."
