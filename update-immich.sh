@@ -10,6 +10,8 @@ CURL_TIMEOUT=30
 
 # Check for required dependencies
 command -v jq >/dev/null 2>&1 || { echo "❌ jq is required but not installed. Exiting."; exit 1; }
+# Check for mail command only if email notifications are enabled
+[[ "${NOTIFICATION_METHOD:-}" == "email" ]] && command -v mail >/dev/null 2>&1 || { echo "❌ mail command is required but not installed. Exiting."; exit 1; }
 
 # Function to log messages
 log_message() {
@@ -17,22 +19,36 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_FILE"
 }
 
-# Function to send Gotify notification
-send_gotify_notification() {
+# Function to send notifications
+send_notification() {
     local title="$1"
     local message="$2"
     local priority="${3:-5}"
     
-    # Escape quotes in message and title
-    message="${message//\"/\\\"}"
-    title="${title//\"/\\\"}"
-    
-    if ! curl --max-time "$CURL_TIMEOUT" -s -X POST "$GOTIFY_URL/message" \
-        -H "Content-Type: application/json" \
-        -H "X-Gotify-Key: $GOTIFY_TOKEN" \
-        -d "{\"title\":\"$title\",\"message\":\"$message\",\"priority\":$priority}"; then
-        log_message "⚠️ Failed to send Gotify notification."
-    fi
+    case "${NOTIFICATION_METHOD:-}" in
+        "email")
+            echo -e "$message" | mail -s "$title" "$NOTIFICATION_EMAIL"
+            if [ $? -ne 0 ]; then
+                log_message "⚠️ Failed to send email notification."
+            fi
+            ;;
+        "gotify")
+            # Escape quotes in message and title
+            message="${message//\"/\\\"}"
+            title="${title//\"/\\\"}"
+            
+            if ! curl --max-time "$CURL_TIMEOUT" -s -X POST "$GOTIFY_URL/message" \
+                -H "Content-Type: application/json" \
+                -H "X-Gotify-Key: $GOTIFY_TOKEN" \
+                -d "{\"title\":\"$title\",\"message\":\"$message\",\"priority\":$priority}"; then
+                log_message "⚠️ Failed to send Gotify notification."
+            fi
+            ;;
+        *)
+            log_message "⚠️ Invalid NOTIFICATION_METHOD: must be 'email' or 'gotify'"
+            exit 1
+            ;;
+    esac
 }
 
 # Check if script is run with sudo and reject if it is
@@ -57,7 +73,10 @@ log_message "🔄 Starting Immich update check..."
 source "$CONFIG_FILE"
 
 # Check if required variables are set
-REQUIRED_VARS=("IMMICH_API_KEY" "DOCKER_COMPOSE_PATH" "GOTIFY_TOKEN" "GOTIFY_URL" "IMMICH_PATH" "IMMICH_LOCALHOST")
+REQUIRED_VARS=("IMMICH_API_KEY" "DOCKER_COMPOSE_PATH" "IMMICH_PATH" "IMMICH_LOCALHOST" "NOTIFICATION_METHOD")
+[[ "$NOTIFICATION_METHOD" == "email" ]] && REQUIRED_VARS+=("NOTIFICATION_EMAIL")
+[[ "$NOTIFICATION_METHOD" == "gotify" ]] && REQUIRED_VARS+=("GOTIFY_TOKEN" "GOTIFY_URL")
+
 for var in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${!var:-}" ]]; then
         echo "❌ Error: Required variable '$var' is not set in $CONFIG_FILE."
@@ -119,7 +138,7 @@ IMMICH_RESPONSE=$(get_github_release_info)
 # Validate GitHub API response
 if [ $? -ne 0 ]; then
     log_message "❌ Failed to fetch latest Immich release info after multiple attempts. Exiting."
-    send_gotify_notification "❌ Immich Update Failed" "Could not fetch latest release information from GitHub" 8
+    send_notification "❌ Immich Update Failed" "Could not fetch latest release information from GitHub" 8
     exit 1
 fi
 
@@ -134,7 +153,7 @@ CURRENT_VERSION_RESPONSE=$(get_current_version)
 # Validate Immich API response
 if [ $? -ne 0 ]; then
     log_message "❌ Failed to fetch Immich current version after multiple attempts. Ensure Immich is running and API key is valid."
-    send_gotify_notification "❌ Immich Update Failed" "Could not connect to Immich server to check version" 8
+    send_notification "❌ Immich Update Failed" "Could not connect to Immich server to check version" 8
     exit 1
 fi
 
@@ -156,7 +175,7 @@ fi
 # Check for breaking changes or important notes in release
 if echo "$RELEASE_NOTES" | grep -iqE "breaking change|important note|caution|warning"; then
     log_message "🚨 Breaking Changes or important notes detected in Immich update (v$LATEST_VERSION). Manual review required."
-    send_gotify_notification "🚨 Immich Update Warning!" "Breaking changes detected in v$LATEST_VERSION. Manual update required.\n\nSee: $RELEASE_URL" 8
+    send_notification "🚨 Immich Update Warning!" "Breaking changes detected in v$LATEST_VERSION. Manual update required.\n\nSee: $RELEASE_URL" 8
     exit 1
 fi
 
@@ -178,10 +197,10 @@ if version_gt "$LATEST_VERSION" "$CURRENT_VERSION"; then
             log_message "⚠️ Failed to clean up old Docker images."
         fi
         
-        send_gotify_notification "✅ Immich Updated!" "Successfully updated from v$CURRENT_VERSION to v$LATEST_VERSION"
+        send_notification "✅ Immich Updated!" "Successfully updated from v$CURRENT_VERSION to v$LATEST_VERSION" 5
     else
         log_message "❌ Update failed! Please check the logs."
-        send_gotify_notification "❌ Immich Update Failed" "Error occurred while updating from v$CURRENT_VERSION to v$LATEST_VERSION" 10
+        send_notification "❌ Immich Update Failed" "Error occurred while updating from v$CURRENT_VERSION to v$LATEST_VERSION" 8
         exit 1
     fi
 else
