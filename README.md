@@ -32,7 +32,7 @@ This script safely automates the Immich update process with several safety featu
 
 1. Clone or download this script to your Immich server
 2. Create a configuration file at `~/immich-app/.immich.conf`
-3. Make the script executable: `chmod +x immich-updater.sh`
+3. Make the script executable: `chmod +x update-immich.sh`
 4. Add a cron job to run the script periodically (e.g., daily)
 
 ## Configuration
@@ -60,14 +60,14 @@ GOTIFY_URL="https://your-gotify-server"
 Run the script manually:
 
 ```bash
-./immich-updater.sh
+./update-immich.sh
 ```
 
 Or set up a cron job to run it automatically:
 
 ```bash
 # Run daily at 3 AM
-0 3 * * * /path/to/immich-updater.sh
+0 3 * * * /path/to/update-immich.sh >> /var/log/immich_update.log 2>&1
 ```
 
 ## Safety Features
