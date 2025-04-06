@@ -1,101 +1,98 @@
 # auto-update-immich-safely
 
+An automated update script for [Immich](https://immich.app/), the self-hosted photo and video backup solution.
+
 ## Overview
 
-This Bash script automates the process of updating Immich while ensuring safety and stability. It performs the following tasks:
+This script safely automates the Immich update process with several safety features:
 
-* Retrieves the current running version of Immich from your server
-* Fetches the latest version information from GitHub
-* Checks if the latest release is at least 7 days old (configurable)
-* Scans release notes for breaking changes, warnings, or important notes
-* Sends notifications via Gotify about update status
-* Maintains a detailed log of all update operations
-* Automatically updates Immich using Docker Compose when safe to do so
+- Waits for a minimum number of days after a release before updating
+- Detects breaking changes in release notes
+- Sends notifications about updates and potential issues
+- Includes error handling and retries for API requests
+- Cleans up old Docker images after successful updates
 
 ## Features
 
-* **Safety First**: Checks for breaking changes and waits for new releases to stabilize
-* **Robust Error Handling**: Includes retry logic for API calls and detailed error reporting
-* **Comprehensive Logging**: Maintains a timestamped log file of all operations
-* **Notifications**: Sends status updates via Gotify for successful updates and warnings
-* **Reliability**: Multiple checks ensure system stability during updates
+- 🔄 **Automatic Updates**: Checks for and applies new Immich releases
+- ⚠️ **Breaking Change Detection**: Warns when release notes contain terms like "breaking change" or "caution"
+- 🕒 **Update Delay**: Configurable waiting period after new releases (default: 7 days)
+- 📧 **Notifications**: Email or Gotify notification support
+- 🧹 **Cleanup**: Removes old Docker images to save disk space
+- 📝 **Logging**: Comprehensive logging of all operations
 
 ## Prerequisites
 
-### 1. Install Required Tools
-
-Ensure you have the following installed:
-
-* `jq` (for parsing JSON)
-* `curl` (for API requests)
-* `docker` & `docker compose` (V2 compose command)
-
-### 2. Configuration File
-
-Create a config file at `~/immich-app/.immich.conf` with the following content:
-
-```bash
-DOCKER_COMPOSE_PATH="/path/to/docker-compose"
-GOTIFY_TOKEN="your_gotify_token"
-GOTIFY_URL="http://your_gotify_instance"
-IMMICH_API_KEY="your_immich_api_key"
-IMMICH_LOCALHOST="192.168.1.X:2283"  # Adjust to your Immich instance
-IMMICH_PATH="/path/to/immich"
-```
+- Docker and Docker Compose
+- `jq` for JSON processing
+- `mail` command (if using email notifications)
+- A running Immich installation
 
 ## Installation
 
-1. Place the script in a location such as `~/immich-app/update-immich.sh`
-2. Make the script executable:
+1. Clone or download this script to your Immich server
+2. Create a configuration file at `~/immich-app/.immich.conf`
+3. Make the script executable: `chmod +x immich-updater.sh`
+4. Add a cron job to run the script periodically (e.g., daily)
+
+## Configuration
+
+Create a configuration file at `~/immich-app/.immich.conf` with the following variables:
 
 ```bash
-chmod +x ~/immich-app/update-immich.sh
+# Required variables
+IMMICH_API_KEY="your_immich_api_key"
+DOCKER_COMPOSE_PATH="/path/to/docker/compose"
+IMMICH_PATH="/path/to/immich"
+IMMICH_LOCALHOST="localhost:2283"  # Adjust port if needed
+NOTIFICATION_METHOD="email"  # or "gotify"
+
+# For email notifications
+NOTIFICATION_EMAIL="your@email.com"
+
+# For Gotify notifications
+GOTIFY_TOKEN="your_gotify_token"
+GOTIFY_URL="https://your-gotify-server"
 ```
 
 ## Usage
 
-### Manual Execution
-
 Run the script manually:
 
 ```bash
-~/immich-app/update-immich.sh
+./immich-updater.sh
 ```
 
-### Scheduled Updates
-
-Schedule it with cron (e.g., run every night at 2 AM):
+Or set up a cron job to run it automatically:
 
 ```bash
-0 2 * * * $HOME/immich-app/update-immich.sh
+# Run daily at 3 AM
+0 3 * * * /path/to/immich-updater.sh
 ```
 
-The script creates its own log file at `~/immich-app/update_log.txt`, so redirecting output in the cron job is optional.
+## Safety Features
 
-## Script Functionality
+- **No Root**: The script refuses to run as root or with sudo
+- **Release Aging**: Waits for a configurable number of days after a release before updating
+- **Breaking Change Detection**: Alerts you when it detects potentially breaking changes
+- **Retries**: Multiple attempts for API calls with timeouts to handle temporary issues
 
-1. **Configuration Loading**: Reads credentials and settings from the config file
-2. **Safety Checks**: Verifies all required variables are set
-3. **Version Comparison**: 
-   - Retrieves current version from Immich API
-   - Fetches latest version from GitHub API
-4. **Release Analysis**:
-   - Checks if the release is at least 7 days old
-   - Scans release notes for any breaking changes or warnings
-5. **Update Process**:
-   - Pulls latest Docker images
-   - Restarts the Immich stack with docker compose
-6. **Notification System**:
-   - Sends status updates via Gotify
-   - Different priority levels based on message importance
+## Logs
+
+Logs are stored at `~/immich-app/update_log.txt` and contain timestamps for all operations, making it easy to troubleshoot issues.
 
 ## Customization
 
-You can modify the following variables at the top of the script:
+The script includes several variables at the top that you can adjust:
 
-* `MIN_DAYS_SINCE_RELEASE`: Change the waiting period for new releases (default: 7 days)
-* `LOG_FILE`: Customize the location of the log file
+- `MIN_DAYS_SINCE_RELEASE`: Minimum days to wait after a release (default: 7)
+- `CURL_TIMEOUT`: Timeout in seconds for curl requests (default: 30)
+- `LOG_FILE`: Location of the log file
 
-## Troubleshooting
+## License
 
-Check the log file at `~/immich-app/update_log.txt` for detailed information about each update attempt. The log includes timestamped entries that can help diagnose any issues with the update process.
+Feel free to modify and distribute according to your needs.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
