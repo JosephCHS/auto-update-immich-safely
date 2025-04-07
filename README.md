@@ -45,7 +45,7 @@ IMMICH_API_KEY="your_immich_api_key"
 DOCKER_COMPOSE_PATH="/path/to/docker/compose"
 IMMICH_PATH="/path/to/immich"
 IMMICH_LOCALHOST="localhost:2283"  # Adjust port if needed
-NOTIFICATION_METHOD="email"  # or "gotify"
+NOTIFICATION_METHOD="none"  # "gotify" / "email"
 
 # For email notifications
 NOTIFICATION_EMAIL="your@email.com"
