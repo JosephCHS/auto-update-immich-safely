@@ -44,8 +44,12 @@ send_notification() {
                 log_message "⚠️ Failed to send Gotify notification."
             fi
             ;;
+        "none")
+            # Skip notifications
+            return 0
+            ;;
         *)
-            log_message "⚠️ Invalid NOTIFICATION_METHOD: must be 'email' or 'gotify'"
+            log_message "⚠️ Invalid NOTIFICATION_METHOD: must be 'email', 'gotify', or 'none'"
             exit 1
             ;;
     esac
@@ -76,6 +80,10 @@ source "$CONFIG_FILE"
 REQUIRED_VARS=("IMMICH_API_KEY" "DOCKER_COMPOSE_PATH" "IMMICH_PATH" "IMMICH_LOCALHOST" "NOTIFICATION_METHOD")
 [[ "$NOTIFICATION_METHOD" == "email" ]] && REQUIRED_VARS+=("NOTIFICATION_EMAIL")
 [[ "$NOTIFICATION_METHOD" == "gotify" ]] && REQUIRED_VARS+=("GOTIFY_TOKEN" "GOTIFY_URL")
+[[ "$NOTIFICATION_METHOD" == "none" ]] || [[ " email gotify " =~ " $NOTIFICATION_METHOD " ]] || {
+    echo "❌ Error: NOTIFICATION_METHOD must be 'email', 'gotify', or 'none'"
+    exit 1
+}
 
 for var in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${!var:-}" ]]; then
