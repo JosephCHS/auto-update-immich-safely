@@ -2,16 +2,51 @@
 
 set -euo pipefail  # Exit on error, prevent unset variables, and catch pipeline failures
 
+# Check if script is run with sudo and reject if it is
+if [ "$(id -u)" -eq 0 ]; then
+    echo "❌ This script should not be run as root or with sudo."
+    exit 1
+fi
+
 # Configuration
 CONFIG_FILE="$HOME/immich-app/.immich.conf"
 LOG_FILE="$HOME/immich-app/update_log.txt"
 MIN_DAYS_SINCE_RELEASE=7
 CURL_TIMEOUT=30
 
-# Check for required dependencies
+# Ensure config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "❌ Config file $CONFIG_FILE not found. Exiting."
+    exit 1
+fi
+
+# Load variables from config file
+# shellcheck disable=SC1090
+source "$CONFIG_FILE"
+
+# Check if required variables are set
+REQUIRED_VARS=("IMMICH_API_KEY" "DOCKER_COMPOSE_PATH" "IMMICH_PATH" "IMMICH_LOCALHOST" "NOTIFICATION_METHOD")
+[[ "$NOTIFICATION_METHOD" == "email" ]] && REQUIRED_VARS+=("NOTIFICATION_EMAIL")
+[[ "$NOTIFICATION_METHOD" == "gotify" ]] && REQUIRED_VARS+=("GOTIFY_TOKEN" "GOTIFY_URL")
+[[ "$NOTIFICATION_METHOD" == "none" ]] || [[ " email gotify " =~ " $NOTIFICATION_METHOD " ]] || {
+    echo "❌ Error: NOTIFICATION_METHOD must be 'email', 'gotify', or 'none'"
+    exit 1
+}
+
+for var in "${REQUIRED_VARS[@]}"; do
+    if [[ -z "${!var:-}" ]]; then
+        echo "❌ Error: Required variable '$var' is not set in $CONFIG_FILE."
+        exit 1
+    fi
+done
+
+# Check for required dependencies : jq
 command -v jq >/dev/null 2>&1 || { echo "❌ jq is required but not installed. Exiting."; exit 1; }
-# Check for mail command only if email notifications are enabled
-[[ "${NOTIFICATION_METHOD:-}" == "email" ]] && command -v mail >/dev/null 2>&1 || { echo "❌ mail command is required but not installed. Exiting."; exit 1; }
+
+# Check for required dependencies : check for mail command only if email notifications are enabled
+if [[ "$NOTIFICATION_METHOD" == "email" ]]; then
+    command -v mail >/dev/null 2>&1 || { echo "❌ mail command is required but not installed. Exiting."; exit 1; }
+fi
 
 # Function to log messages
 log_message() {
@@ -55,42 +90,10 @@ send_notification() {
     esac
 }
 
-# Check if script is run with sudo and reject if it is
-if [ "$(id -u)" -eq 0 ]; then
-    echo "❌ This script should not be run as root or with sudo."
-    exit 1
-fi
-
-# Ensure config file exists
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "❌ Config file $CONFIG_FILE not found. Exiting."
-    exit 1
-fi
-
 # Create log directory if it doesn't exist
 mkdir -p "$(dirname "$LOG_FILE")"
 
 log_message "🔄 Starting Immich update check..."
-
-# Load variables from config file
-# shellcheck disable=SC1090
-source "$CONFIG_FILE"
-
-# Check if required variables are set
-REQUIRED_VARS=("IMMICH_API_KEY" "DOCKER_COMPOSE_PATH" "IMMICH_PATH" "IMMICH_LOCALHOST" "NOTIFICATION_METHOD")
-[[ "$NOTIFICATION_METHOD" == "email" ]] && REQUIRED_VARS+=("NOTIFICATION_EMAIL")
-[[ "$NOTIFICATION_METHOD" == "gotify" ]] && REQUIRED_VARS+=("GOTIFY_TOKEN" "GOTIFY_URL")
-[[ "$NOTIFICATION_METHOD" == "none" ]] || [[ " email gotify " =~ " $NOTIFICATION_METHOD " ]] || {
-    echo "❌ Error: NOTIFICATION_METHOD must be 'email', 'gotify', or 'none'"
-    exit 1
-}
-
-for var in "${REQUIRED_VARS[@]}"; do
-    if [[ -z "${!var:-}" ]]; then
-        echo "❌ Error: Required variable '$var' is not set in $CONFIG_FILE."
-        exit 1
-    fi
-done
 
 # Get latest Immich release info with retry
 get_github_release_info() {
