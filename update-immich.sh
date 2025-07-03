@@ -8,8 +8,8 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
-# Set PATH explicitly for cron compatibility
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Set PATH explicitly for cron compatibility (add common Docker locations)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/opt/docker/bin"
 
 # Configuration
 CONFIG_FILE="$HOME/immich-app/.immich.conf"
@@ -71,14 +71,25 @@ for var in "${REQUIRED_VARS[@]}"; do
 done
 
 # Check for required dependencies with full paths
-DOCKER_CMD=$(command -v docker 2>/dev/null || echo "/usr/bin/docker")
-JQ_CMD=$(command -v jq 2>/dev/null || echo "/usr/bin/jq")
-CURL_CMD=$(command -v curl 2>/dev/null || echo "/usr/bin/curl")
+DOCKER_CMD=$(command -v docker 2>/dev/null)
+JQ_CMD=$(command -v jq 2>/dev/null)
+CURL_CMD=$(command -v curl 2>/dev/null)
 
-# Verify commands exist
-for cmd in "$DOCKER_CMD" "$JQ_CMD" "$CURL_CMD"; do
-    if [ ! -x "$cmd" ]; then
-        echo "❌ Required command not found: $cmd"
+# Create log directory if it doesn't exist (moved up for early logging)
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Verify commands exist and log the issue
+for cmd_name in "docker" "jq" "curl"; do
+    case $cmd_name in
+        "docker") cmd_path="$DOCKER_CMD" ;;
+        "jq") cmd_path="$JQ_CMD" ;;
+        "curl") cmd_path="$CURL_CMD" ;;
+    esac
+    
+    if [ -z "$cmd_path" ] || [ ! -x "$cmd_path" ]; then
+        log_message "❌ Required command not found: $cmd_name"
+        log_message "🔍 Searched in PATH: $PATH"
+        log_message "🔍 Command -v $cmd_name result: $(command -v $cmd_name 2>/dev/null || echo 'not found')"
         exit 1
     fi
 done
