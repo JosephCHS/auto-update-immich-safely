@@ -45,10 +45,7 @@ IMMICH_API_KEY="your_immich_api_key"
 DOCKER_COMPOSE_PATH="/path/to/docker/compose"
 IMMICH_PATH="/path/to/immich"
 IMMICH_LOCALHOST="localhost:2283"  # Adjust port if needed
-NOTIFICATION_METHOD="none"  # "gotify" / "email"
-
-# For email notifications
-NOTIFICATION_EMAIL="your@email.com"
+NOTIFICATION_METHOD="none"  # "gotify"
 
 # For Gotify notifications
 GOTIFY_TOKEN="your_gotify_token"
@@ -67,7 +64,7 @@ Or set up a cron job to run it automatically:
 
 ```bash
 # Run daily at 3 AM
-0 3 * * * /path/to/update-immich.sh >> /var/log/immich_update.log 2>&1
+0 3 * * * /path/to/update-immich.sh
 ```
 
 ## Safety Features
