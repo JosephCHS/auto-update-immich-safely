@@ -8,6 +8,9 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
+# Set PATH explicitly for cron compatibility
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 # Configuration
 CONFIG_FILE="$HOME/immich-app/.immich.conf"
 LOG_FILE="$HOME/immich-app/update_log.txt"
@@ -67,8 +70,18 @@ for var in "${REQUIRED_VARS[@]}"; do
     fi
 done
 
-# Check for required dependencies : jq
-command -v jq >/dev/null 2>&1 || { echo "❌ jq is required but not installed. Exiting."; exit 1; }
+# Check for required dependencies with full paths
+DOCKER_CMD=$(command -v docker 2>/dev/null || echo "/usr/bin/docker")
+JQ_CMD=$(command -v jq 2>/dev/null || echo "/usr/bin/jq")
+CURL_CMD=$(command -v curl 2>/dev/null || echo "/usr/bin/curl")
+
+# Verify commands exist
+for cmd in "$DOCKER_CMD" "$JQ_CMD" "$CURL_CMD"; do
+    if [ ! -x "$cmd" ]; then
+        echo "❌ Required command not found: $cmd"
+        exit 1
+    fi
+done
 
 # Function to log messages
 log_message() {
@@ -88,7 +101,7 @@ send_notification() {
             message="${message//\"/\\\"}"
             title="${title//\"/\\\"}"
             
-            if ! curl --max-time "$CURL_TIMEOUT" -s -X POST "$GOTIFY_URL/message" \
+            if ! "$CURL_CMD" --max-time "$CURL_TIMEOUT" -s -X POST "$GOTIFY_URL/message" \
                 -H "Content-Type: application/json" \
                 -H "X-Gotify-Key: $GOTIFY_TOKEN" \
                 -d "{\"title\":\"$title\",\"message\":\"$message\",\"priority\":$priority}" >/dev/null 2>&1; then
@@ -110,6 +123,10 @@ send_notification() {
 mkdir -p "$(dirname "$LOG_FILE")"
 
 log_message "🔄 Starting Immich update check (PID: $$)..."
+log_message "📍 Running from: $(pwd)"
+log_message "🔧 Using Docker: $DOCKER_CMD"
+log_message "🔧 Using jq: $JQ_CMD"
+log_message "🔧 Using curl: $CURL_CMD"
 
 # Get latest Immich release info with retry
 get_github_release_info() {
@@ -118,7 +135,7 @@ get_github_release_info() {
     local response=""
     
     while [ "$retry_count" -lt "$max_retries" ]; do
-        response=$(curl --max-time "$CURL_TIMEOUT" -s -f "$IMMICH_RELEASE_URL" 2>/dev/null)
+        response=$("$CURL_CMD" --max-time "$CURL_TIMEOUT" -s -f "$IMMICH_RELEASE_URL" 2>/dev/null)
         if [[ -n "$response" && "$response" != "null" ]]; then
             echo "$response"
             return 0
@@ -138,7 +155,7 @@ get_current_version() {
     local response=""
     
     while [ "$retry_count" -lt "$max_retries" ]; do
-        response=$(curl --max-time "$CURL_TIMEOUT" -s -L -f "http://$IMMICH_LOCALHOST/api/server/about" -H "Accept: application/json" -H "x-api-key: $IMMICH_API_KEY" 2>/dev/null)
+        response=$("$CURL_CMD" --max-time "$CURL_TIMEOUT" -s -L -f "http://$IMMICH_LOCALHOST/api/server/about" -H "Accept: application/json" -H "x-api-key: $IMMICH_API_KEY" 2>/dev/null)
         if [[ -n "$response" && "$response" != "null" ]]; then
             echo "$response"
             return 0
@@ -165,7 +182,7 @@ wait_for_immich() {
     log_message "⏳ Waiting for Immich to be ready after update..."
     
     while [ $wait_time -lt $max_wait ]; do
-        if curl --max-time 10 -s -f "http://$IMMICH_LOCALHOST/api/server/about" -H "x-api-key: $IMMICH_API_KEY" >/dev/null 2>&1; then
+        if "$CURL_CMD" --max-time 10 -s -f "http://$IMMICH_LOCALHOST/api/server/about" -H "x-api-key: $IMMICH_API_KEY" >/dev/null 2>&1; then
             log_message "✅ Immich is ready and responding."
             return 0
         fi
@@ -192,9 +209,9 @@ if [ $? -ne 0 ]; then
 fi
 
 # Extract version and release notes
-LATEST_VERSION=$(echo "$IMMICH_RESPONSE" | jq -r '.tag_name' | sed 's/^v//')
-RELEASE_NOTES=$(echo "$IMMICH_RESPONSE" | jq -r '.body')
-RELEASE_URL=$(echo "$IMMICH_RESPONSE" | jq -r '.html_url')
+LATEST_VERSION=$(echo "$IMMICH_RESPONSE" | "$JQ_CMD" -r '.tag_name' | sed 's/^v//')
+RELEASE_NOTES=$(echo "$IMMICH_RESPONSE" | "$JQ_CMD" -r '.body')
+RELEASE_URL=$(echo "$IMMICH_RESPONSE" | "$JQ_CMD" -r '.html_url')
 
 # Get current running version
 CURRENT_VERSION_RESPONSE=$(get_current_version)
@@ -206,12 +223,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-CURRENT_VERSION=$(echo "$CURRENT_VERSION_RESPONSE" | jq -r '.version' | sed 's/^v//')
+CURRENT_VERSION=$(echo "$CURRENT_VERSION_RESPONSE" | "$JQ_CMD" -r '.version' | sed 's/^v//')
 
 log_message "📊 Current version: v$CURRENT_VERSION, Latest version: v$LATEST_VERSION"
 
 # Get latest release date from GitHub
-LATEST_RELEASE_DATE=$(echo "$IMMICH_RESPONSE" | jq -r '.published_at' | cut -d'T' -f1)
+LATEST_RELEASE_DATE=$(echo "$IMMICH_RESPONSE" | "$JQ_CMD" -r '.published_at' | cut -d'T' -f1)
 CURRENT_DATE=$(date +"%Y-%m-%d")
 DAYS_SINCE_RELEASE=$(( ( $(date -d "$CURRENT_DATE" +%s) - $(date -d "$LATEST_RELEASE_DATE" +%s) ) / 86400 ))
 
@@ -234,8 +251,8 @@ if version_gt "$LATEST_VERSION" "$CURRENT_VERSION"; then
       
     # Perform update
     if cd "$IMMICH_PATH" && \
-       docker compose pull 2>&1 | tee -a "$LOG_FILE" && \
-       docker compose up -d 2>&1 | tee -a "$LOG_FILE"; then
+       "$DOCKER_CMD" compose pull 2>&1 | tee -a "$LOG_FILE" && \
+       "$DOCKER_CMD" compose up -d 2>&1 | tee -a "$LOG_FILE"; then
         
         # Wait for Immich to be ready
         if wait_for_immich; then
@@ -243,7 +260,7 @@ if version_gt "$LATEST_VERSION" "$CURRENT_VERSION"; then
             
             # Cleanup old images
             log_message "🧹 Cleaning up old Docker images..."
-            if docker image prune -f --filter "until=24h" >/dev/null 2>&1; then
+            if "$DOCKER_CMD" image prune -f --filter "until=24h" >/dev/null 2>&1; then
                 log_message "✅ Old Docker images cleaned up successfully."
             else
                 log_message "⚠️ Failed to clean up old Docker images."
