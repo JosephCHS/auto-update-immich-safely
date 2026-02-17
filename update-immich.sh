@@ -250,7 +250,7 @@ if [ "$DAYS_SINCE_RELEASE" -lt "$MIN_DAYS_SINCE_RELEASE" ]; then
 fi
 
 # Check for breaking changes or important notes in release
-if echo "$RELEASE_NOTES" | grep -iqE "(breaking.change|breaking.changes|important.note|caution|warning|⚠️|🚨|deprecat|remov|incompatibl|migration.required|action.required|breaking:|⚠|breaking\s|major.change)"; then
+if echo "$RELEASE_NOTES" | grep -iqE "(breaking change|breaking changes|important note|caution|warning|⚠️|🚨|deprecated|incompatible|migration required|action required|breaking:|⚠|major change)"; then
     log_message "🚨 Breaking Changes or important notes detected in Immich update (v$LATEST_VERSION). Manual review required."
     
     # Optional: Show the specific lines that triggered the warning
